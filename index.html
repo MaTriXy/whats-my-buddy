@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Discover Your Claude Code Buddy</title>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -987,10 +986,11 @@ function startRecording() {
   recIndicator.style.display = 'flex';
   shareButtons.style.display = 'none';
 
-  // Create an offscreen canvas to composite the card
+  // Create a recording canvas matching the card size
+  const cardRect = card.getBoundingClientRect();
   recordingCanvas = document.createElement('canvas');
-  recordingCanvas.width = 760;
-  recordingCanvas.height = 1040;
+  recordingCanvas.width = Math.round(cardRect.width * 2);
+  recordingCanvas.height = Math.round(cardRect.height * 2);
   recordingCtx = recordingCanvas.getContext('2d');
 
   const stream = recordingCanvas.captureStream(30);
@@ -1015,32 +1015,144 @@ function startRecording() {
 
   mediaRecorder.start(100);
 
-  // Capture frames by rendering the card element to the recording canvas
-  captureFrame();
-  captureInterval = setInterval(captureFrame, 1000 / 30);
+  // Use rAF for smooth frame capture
+  function captureLoop() {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+    captureFrame();
+    captureInterval = requestAnimationFrame(captureLoop);
+  }
+  captureInterval = requestAnimationFrame(captureLoop);
 }
 
 function captureFrame() {
   if (!recordingCtx) return;
-  html2canvas(card, {
-    backgroundColor: '#161b22',
-    scale: 2,
-    logging: false,
-    useCORS: true,
-  }).then(snapshot => {
-    recordingCtx.clearRect(0, 0, recordingCanvas.width, recordingCanvas.height);
-    recordingCtx.drawImage(snapshot, 0, 0, recordingCanvas.width, recordingCanvas.height);
-  }).catch(() => {});
+  const rw = recordingCanvas.width;
+  const rh = recordingCanvas.height;
+
+  // 1. Dark background
+  recordingCtx.fillStyle = '#161b22';
+  recordingCtx.fillRect(0, 0, rw, rh);
+
+  // 2. Draw buddy content as text (visible under the scratch overlay)
+  if (currentBuddy) {
+    recordingCtx.save();
+    recordingCtx.textAlign = 'center';
+    const cx = rw / 2;
+
+    // Sprite
+    const spriteEl = document.getElementById('sprite-display');
+    if (spriteEl && spriteEl.textContent) {
+      recordingCtx.fillStyle = '#e6edf3';
+      recordingCtx.font = '24px "Courier New", monospace';
+      const lines = spriteEl.textContent.split('\n');
+      lines.forEach((line, i) => {
+        recordingCtx.fillText(line, cx, 160 + i * 28);
+      });
+    }
+
+    // Species name
+    recordingCtx.fillStyle = '#e6edf3';
+    recordingCtx.font = 'bold 44px -apple-system, sans-serif';
+    recordingCtx.fillText(currentBuddy.species.toUpperCase(), cx, 380);
+
+    // Rarity stars
+    const rarityColors = { common:'#8b949e', uncommon:'#3fb950', rare:'#58a6ff', epic:'#bc8cff', legendary:'#f0883e' };
+    recordingCtx.fillStyle = rarityColors[currentBuddy.rarity] || '#e6edf3';
+    recordingCtx.font = '32px sans-serif';
+    recordingCtx.fillText(RARITY_STARS_MAP[currentBuddy.rarity], cx, 420);
+
+    // Traits
+    recordingCtx.fillStyle = '#8b949e';
+    recordingCtx.font = '22px -apple-system, sans-serif';
+    recordingCtx.fillText('eye: ' + currentBuddy.eye + '  \u2022  hat: ' + currentBuddy.hat, cx, 460);
+
+    // Shiny badge
+    if (currentBuddy.shiny) {
+      recordingCtx.fillStyle = '#f0c040';
+      recordingCtx.font = '26px sans-serif';
+      recordingCtx.fillText('\u2728 SHINY', cx, 500);
+    }
+
+    // Stats
+    const statY = 540;
+    recordingCtx.textAlign = 'left';
+    STAT_NAMES.forEach((name, i) => {
+      const val = currentBuddy.stats[name];
+      const y = statY + i * 36;
+      // Label
+      recordingCtx.fillStyle = '#8b949e';
+      recordingCtx.font = '600 20px -apple-system, sans-serif';
+      recordingCtx.textAlign = 'right';
+      recordingCtx.fillText(name, rw * 0.3, y);
+      // Bar background
+      const barX = rw * 0.33;
+      const barW = rw * 0.45;
+      recordingCtx.fillStyle = '#21262d';
+      recordingCtx.fillRect(barX, y - 12, barW, 16);
+      // Bar fill
+      recordingCtx.fillStyle = rarityColors[currentBuddy.rarity] || '#8b949e';
+      recordingCtx.fillRect(barX, y - 12, barW * (val / 100), 16);
+      // Value
+      recordingCtx.fillStyle = '#e6edf3';
+      recordingCtx.textAlign = 'left';
+      recordingCtx.fillText('' + val, barX + barW + 10, y);
+    });
+
+    // Personality
+    recordingCtx.textAlign = 'center';
+    recordingCtx.fillStyle = '#8b949e';
+    recordingCtx.font = 'italic 18px -apple-system, sans-serif';
+    const personality = DEFAULT_PERSONALITIES[currentBuddy.species];
+    if (personality) {
+      // Wrap text
+      const words = personality.split(' ');
+      let line = '';
+      let py = 740;
+      words.forEach(word => {
+        const test = line + word + ' ';
+        if (recordingCtx.measureText(test).width > rw * 0.8) {
+          recordingCtx.fillText('"' + line.trim() + '"', cx, py);
+          line = word + ' ';
+          py += 24;
+        } else {
+          line = test;
+        }
+      });
+      if (line.trim()) recordingCtx.fillText('"' + line.trim() + '"', cx, py);
+    }
+
+    recordingCtx.restore();
+  }
+
+  // 3. Draw the scratch canvas overlay on top
+  recordingCtx.drawImage(canvas, 0, 0, rw, rh);
+
+  // 4. Draw confetti canvas if it exists
+  const confettiCanvas = document.querySelector('canvas[style*="position:fixed"]');
+  if (confettiCanvas) {
+    const cardRect = card.getBoundingClientRect();
+    recordingCtx.drawImage(
+      confettiCanvas,
+      cardRect.left * 2, cardRect.top * 2, rw, rh,
+      0, 0, rw, rh
+    );
+  }
 }
 
 function stopRecording() {
-  clearInterval(captureInterval);
-  captureInterval = null;
+  if (captureInterval) { cancelAnimationFrame(captureInterval); captureInterval = null; }
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    // Capture a few more frames for the confetti, then stop
+    // Keep capturing for 2.5s more to get the full confetti + reveal
+    const extendCapture = () => {
+      captureFrame();
+      captureInterval = requestAnimationFrame(extendCapture);
+    };
+    captureInterval = requestAnimationFrame(extendCapture);
     setTimeout(() => {
+      cancelAnimationFrame(captureInterval);
+      captureInterval = null;
       mediaRecorder.stop();
-    }, 2000);
+    }, 2500);
   }
 }
 
@@ -1075,7 +1187,7 @@ function generateCard() {
 
 function reset() {
   if (spriteInterval) clearInterval(spriteInterval);
-  if (captureInterval) { clearInterval(captureInterval); captureInterval = null; }
+  if (captureInterval) { cancelAnimationFrame(captureInterval); captureInterval = null; }
   if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
   shareSection.style.display = 'none';
   inputSection.style.display = 'flex';
