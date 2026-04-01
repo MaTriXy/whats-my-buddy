@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover Your Claude Code Buddy</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d1117;
+  --card-bg: #161b22;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #58a6ff;
+  --common: #8b949e;
+  --uncommon: #3fb950;
+  --rare: #58a6ff;
+  --epic: #bc8cff;
+  --legendary: #f0883e;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow-x: hidden;
+}
+
+h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
+  text-align: center;
+  max-width: 400px;
+}
+
+/* --- Input State --- */
+#input-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+#input-section input {
+  width: 320px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+  background: #0d1117;
+  color: var(--text);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#input-section input:focus { border-color: var(--accent); }
+
+#generate-btn, #scratch-again-btn {
+  padding: 12px 32px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+#generate-btn:hover, #scratch-again-btn:hover { opacity: 0.85; }
+
+.hint {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  max-width: 320px;
+  text-align: center;
+}
+
+/* --- Card --- */
+#card-section {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.card {
+  position: relative;
+  width: 380px;
+  height: 520px;
+  background: var(--card-bg);
+  border-radius: 16px;
+  border: 2px solid #30363d;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  transition: border-color 0.6s, box-shadow 0.6s;
+}
+
+.card canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='22' fill='%23d4a843' stroke='%23b8922e' stroke-width='2.5'/%3E%3Ccircle cx='24' cy='24' r='16' fill='none' stroke='%23c9a23a' stroke-width='1.5'/%3E%3Ctext x='24' y='30' text-anchor='middle' font-size='18' font-weight='bold' fill='%23b8922e'%3E%C2%A2%3C/text%3E%3C/svg%3E") 24 24, crosshair;
+  z-index: 10;
+  transition: opacity 0.8s ease-out;
+}
+
+/* --- Foil picker --- */
+.foil-picker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.foil-picker span {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.foil-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 2px solid #30363d;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.15s;
+}
+
+.foil-btn:hover { transform: scale(1.1); }
+.foil-btn.active { border-color: var(--accent); border-width: 3px; }
+
+.foil-silver {
+  background: linear-gradient(135deg, #a8a9ad, #d4d4d8 30%, #b0b0b8 50%, #c8c8d0 70%, #9898a0);
+}
+
+.foil-gold {
+  background: linear-gradient(135deg, #DFBD69, #c9a23a 30%, #b8922e 50%, #d4aa40 70%, #926F34);
+}
+
+.foil-holographic {
+  background: linear-gradient(135deg, #ff6b9d, #c084fc 25%, #60a5fa 50%, #34d399 75%, #fbbf24);
+}
+
+.card canvas.fading { opacity: 0; pointer-events: none; }
+
+#buddy-content {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  gap: 8px;
+}
+
+/* --- Sprite --- */
+#sprite-display {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: pre;
+  text-align: center;
+  min-height: 96px;
+}
+
+/* --- Stats --- */
+.species-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.rarity-stars { font-size: 1.1rem; }
+.trait-line { color: var(--text-dim); font-size: 0.85rem; }
+.shiny-badge {
+  font-size: 0.9rem;
+  color: #f0c040;
+  text-shadow: 0 0 8px rgba(240,192,64,0.5);
+  display: none;
+}
+
+.stats {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.stat-name {
+  width: 80px;
+  text-align: right;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.stat-bar-bg {
+  flex: 1;
+  height: 10px;
+  background: #21262d;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 1s ease-out;
+}
+
+.stat-value {
+  width: 24px;
+  text-align: right;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.personality {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-style: italic;
+  text-align: center;
+  line-height: 1.4;
+  margin-top: 4px;
+  max-width: 320px;
+}
+
+#scratch-again-btn {
+  display: none;
+  margin-top: 1rem;
+}
+
+/* --- Rarity glow --- */
+.card.rarity-common { border-color: var(--common); }
+.card.rarity-uncommon { border-color: var(--uncommon); box-shadow: 0 0 20px rgba(63,185,80,0.2); }
+.card.rarity-rare { border-color: var(--rare); box-shadow: 0 0 24px rgba(88,166,255,0.25); }
+.card.rarity-epic { border-color: var(--epic); box-shadow: 0 0 28px rgba(188,140,255,0.3); }
+.card.rarity-legendary { border-color: var(--legendary); box-shadow: 0 0 32px rgba(240,136,62,0.35); }
+
+/* --- Shiny shimmer --- */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.card.shiny::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 25%,
+    rgba(255,255,255,0.08) 37%,
+    rgba(255,255,255,0.15) 50%,
+    rgba(255,255,255,0.08) 63%,
+    transparent 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 16px;
+}
+
+/* --- Rarity-colored stat bars --- */
+.rarity-common .stat-bar-fill { background: var(--common); }
+.rarity-uncommon .stat-bar-fill { background: var(--uncommon); }
+.rarity-rare .stat-bar-fill { background: var(--rare); }
+.rarity-epic .stat-bar-fill { background: var(--epic); }
+.rarity-legendary .stat-bar-fill { background: var(--legendary); }
+
+/* --- Responsive --- */
+@media (max-width: 420px) {
+  .card { width: 340px; height: 480px; }
+  #input-section input { width: 280px; }
+}
+</style>
+</head>
+<body>
+
+<h1>Discover Your Claude Code Buddy</h1>
+<p class="subtitle">Paste your account ID below, then scratch the card to reveal your companion!</p>
+
+<div id="input-section">
+  <input type="text" id="user-id" placeholder="Paste your account ID..." autocomplete="off" spellcheck="false">
+  <div class="foil-picker">
+    <span>Foil:</span>
+    <button class="foil-btn foil-silver active" data-foil="silver" title="Silver"></button>
+    <button class="foil-btn foil-gold" data-foil="gold" title="Gold"></button>
+    <button class="foil-btn foil-holographic" data-foil="holographic" title="Holographic"></button>
+  </div>
+  <button id="generate-btn">Generate Card</button>
+  <p class="hint">Your ID never leaves your browser. All computation happens locally.</p>
+</div>
+
+<div id="card-section">
+  <div class="card" id="card">
+    <div id="buddy-content">
+      <div id="sprite-display"></div>
+      <div class="species-name" id="species-name"></div>
+      <div class="rarity-stars" id="rarity-stars"></div>
+      <div class="trait-line" id="trait-line"></div>
+      <div class="shiny-badge" id="shiny-badge">&#10024; SHINY</div>
+      <div class="stats" id="stats"></div>
+      <div class="personality" id="personality"></div>
+    </div>
+    <canvas id="scratch-canvas"></canvas>
+  </div>
+  <button id="scratch-again-btn">Scratch Again</button>
+</div>
+
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const ORIGINAL_SALT = 'friend-2026-401';
+
+const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+const RARITY_WEIGHTS = { common: 60, uncommon: 25, rare: 10, epic: 4, legendary: 1 };
+const RARITY_STARS_MAP = { common: '\u2605', uncommon: '\u2605\u2605', rare: '\u2605\u2605\u2605', epic: '\u2605\u2605\u2605\u2605', legendary: '\u2605\u2605\u2605\u2605\u2605' };
+const RARITY_FLOOR = { common: 5, uncommon: 15, rare: 25, epic: 35, legendary: 50 };
+const SPECIES = ['duck','goose','blob','cat','dragon','octopus','owl','penguin','turtle','snail','ghost','axolotl','capybara','cactus','robot','rabbit','mushroom','chonk'];
+const EYES = ['\u00b7','\u2726','\u00d7','\u25c9','@','\u00b0'];
+const HATS = ['none','crown','tophat','propeller','halo','wizard','beanie','tinyduck'];
+const STAT_NAMES = ['DEBUGGING','PATIENCE','CHAOS','WISDOM','SNARK'];
+
+// ============================================================
+// WYHASH v4 FINAL — Pure JS BigInt port
+// Reference: https://github.com/wangyi-fudan/wyhash
+// ============================================================
+const MASK64 = (1n << 64n) - 1n;
+const _wyp = [0xa0761d6478bd642fn, 0xe7037ed1a0b428dbn, 0x8ebc6af09c88c6e3n, 0x589965cc75374cc3n];
+
+function _wymum(a, b) {
+  a &= MASK64; b &= MASK64;
+  const r = a * b;
+  return { lo: r & MASK64, hi: (r >> 64n) & MASK64 };
+}
+
+function _wymix(a, b) {
+  const { lo, hi } = _wymum(a, b);
+  return (lo ^ hi) & MASK64;
+}
+
+function _wyr3(p, off, k) {
+  return (BigInt(p[off]) << 16n) | (BigInt(p[off + (k >> 1)]) << 8n) | BigInt(p[off + k - 1]);
+}
+
+function _wyr4(p, off) {
+  return BigInt(p[off]) | (BigInt(p[off+1]) << 8n) | (BigInt(p[off+2]) << 16n) | (BigInt(p[off+3]) << 24n);
+}
+
+function _wyr8(p, off) {
+  return _wyr4(p, off) | (_wyr4(p, off + 4) << 32n);
+}
+
+function wyhash(bytes, seed) {
+  seed &= MASK64;
+  const len = bytes.length;
+  seed = (seed ^ _wymix((seed ^ _wyp[0]) & MASK64, _wyp[1])) & MASK64;
+  let a, b;
+  if (len <= 16) {
+    if (len >= 4) {
+      const half = (len >> 3) << 2;
+      a = ((_wyr4(bytes, 0) << 32n) | _wyr4(bytes, half)) & MASK64;
+      b = ((_wyr4(bytes, len - 4) << 32n) | _wyr4(bytes, len - 4 - half)) & MASK64;
+    } else if (len > 0) {
+      a = _wyr3(bytes, 0, len); b = 0n;
+    } else {
+      a = 0n; b = 0n;
+    }
+  } else if (len <= 48) {
+    let i = 0, p = 0;
+    while (i + 16 <= len) {
+      seed = _wymix(_wyr8(bytes, p) ^ _wyp[1], _wyr8(bytes, p + 8) ^ seed);
+      p += 16; i += 16;
+    }
+    a = _wyr8(bytes, len - 16); b = _wyr8(bytes, len - 8);
+  } else {
+    let see1 = seed, see2 = seed, p = 0, i = len;
+    while (i > 48) {
+      seed = _wymix(_wyr8(bytes, p) ^ _wyp[1], _wyr8(bytes, p + 8) ^ seed);
+      see1 = _wymix(_wyr8(bytes, p + 16) ^ _wyp[2], _wyr8(bytes, p + 24) ^ see1);
+      see2 = _wymix(_wyr8(bytes, p + 32) ^ _wyp[3], _wyr8(bytes, p + 40) ^ see2);
+      p += 48; i -= 48;
+    }
+    seed = (seed ^ see1 ^ see2) & MASK64;
+    while (i > 16) {
+      seed = _wymix(_wyr8(bytes, p) ^ _wyp[1], _wyr8(bytes, p + 8) ^ seed);
+      p += 16; i -= 16;
+    }
+    a = _wyr8(bytes, p + i - 16); b = _wyr8(bytes, p + i - 8);
+  }
+  a = (a ^ _wyp[1]) & MASK64;
+  b = (b ^ seed) & MASK64;
+  const m = _wymum(a, b);
+  return _wymix((m.lo ^ _wyp[0] ^ BigInt(len)) & MASK64, (m.hi ^ _wyp[1]) & MASK64);
+}
+
+function hashString(s) {
+  const bytes = new TextEncoder().encode(s);
+  return Number(wyhash(bytes, 0n) & 0xFFFFFFFFn);
+}
+
+// ============================================================
+// MULBERRY32 PRNG + BUDDY GENERATION
+// ============================================================
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+function rollRarity(rng) {
+  const total = Object.values(RARITY_WEIGHTS).reduce((a, b) => a + b, 0);
+  let roll = rng() * total;
+  for (const r of RARITIES) { roll -= RARITY_WEIGHTS[r]; if (roll < 0) return r; }
+  return 'common';
+}
+
+function rollStats(rng, rarity) {
+  const floor = RARITY_FLOOR[rarity];
+  const peak = pick(rng, STAT_NAMES);
+  let dump = pick(rng, STAT_NAMES);
+  while (dump === peak) dump = pick(rng, STAT_NAMES);
+  const stats = {};
+  for (const name of STAT_NAMES) {
+    if (name === peak) stats[name] = Math.min(100, floor + 50 + Math.floor(rng() * 30));
+    else if (name === dump) stats[name] = Math.max(1, floor - 10 + Math.floor(rng() * 15));
+    else stats[name] = floor + Math.floor(rng() * 40);
+  }
+  return stats;
+}
+
+function rollBuddy(userId) {
+  const key = userId + ORIGINAL_SALT;
+  const rng = mulberry32(hashString(key));
+  const rarity = rollRarity(rng);
+  return {
+    rarity,
+    species: pick(rng, SPECIES),
+    eye: pick(rng, EYES),
+    hat: rarity === 'common' ? 'none' : pick(rng, HATS),
+    shiny: rng() < 0.01,
+    stats: rollStats(rng, rarity),
+  };
+}
+
+// ============================================================
+// SPRITES — 18 species x 3 frames x 5 lines
+// ============================================================
+const BODIES = {
+  duck: [
+    ['            ','    __      ','  <({E} )___  ','   (  ._>   ','    `--\u00b4    '],
+    ['            ','    __      ','  <({E} )___  ','   (  ._>   ','    `--\u00b4~   '],
+    ['            ','    __      ','  <({E} )___  ','   (  .__>  ','    `--\u00b4    '],
+  ],
+  goose: [
+    ['            ','     ({E}>    ','     ||     ','   _(__)_   ','    ^^^^    '],
+    ['            ','    ({E}>     ','     ||     ','   _(__)_   ','    ^^^^    '],
+    ['            ','     ({E}>>   ','     ||     ','   _(__)_   ','    ^^^^    '],
+  ],
+  blob: [
+    ['            ','   .----.   ','  ( {E}  {E} )  ','  (      )  ','   `----\u00b4   '],
+    ['            ','  .------.  ',' (  {E}  {E}  ) ',' (        ) ','  `------\u00b4  '],
+    ['            ','    .--.    ','   ({E}  {E})   ','   (    )   ','    `--\u00b4    '],
+  ],
+  cat: [
+    ['            ','   /\\_/\\    ','  ( {E}   {E})  ','  (  \u03c9  )   ','  (")_(")   '],
+    ['            ','   /\\_/\\    ','  ( {E}   {E})  ','  (  \u03c9  )   ','  (")_(")~  '],
+    ['            ','   /\\-/\\    ','  ( {E}   {E})  ','  (  \u03c9  )   ','  (")_(")   '],
+  ],
+  dragon: [
+    ['            ','  /^\\  /^\\  ',' <  {E}  {E}  > ',' (   ~~   ) ','  `-vvvv-\u00b4  '],
+    ['            ','  /^\\  /^\\  ',' <  {E}  {E}  > ',' (        ) ','  `-vvvv-\u00b4  '],
+    ['   ~    ~   ','  /^\\  /^\\  ',' <  {E}  {E}  > ',' (   ~~   ) ','  `-vvvv-\u00b4  '],
+  ],
+  octopus: [
+    ['            ','   .----.   ','  ( {E}  {E} )  ','  (______)  ','  /\\/\\/\\/\\  '],
+    ['            ','   .----.   ','  ( {E}  {E} )  ','  (______)  ','  \\/\\/\\/\\/  '],
+    ['     o      ','   .----.   ','  ( {E}  {E} )  ','  (______)  ','  /\\/\\/\\/\\  '],
+  ],
+  owl: [
+    ['            ','   /\\  /\\   ','  (({E})({E}))  ','  (  ><  )  ','   `----\u00b4   '],
+    ['            ','   /\\  /\\   ','  (({E})({E}))  ','  (  ><  )  ','   .----.   '],
+    ['            ','   /\\  /\\   ','  (({E})(-))  ','  (  ><  )  ','   `----\u00b4   '],
+  ],
+  penguin: [
+    ['            ','  .---.     ','  ({E}>{E})     ',' /(   )\\    ','  `---\u00b4     '],
+    ['            ','  .---.     ','  ({E}>{E})     ',' |(   )|    ','  `---\u00b4     '],
+    ['  .---.     ','  ({E}>{E})     ',' /(   )\\    ','  `---\u00b4     ','   ~ ~      '],
+  ],
+  turtle: [
+    ['            ','   _,--._   ','  ( {E}  {E} )  ',' /[______]\\ ','  ``    ``  '],
+    ['            ','   _,--._   ','  ( {E}  {E} )  ',' /[______]\\ ','   ``  ``   '],
+    ['            ','   _,--._   ','  ( {E}  {E} )  ',' /[======]\\ ','  ``    ``  '],
+  ],
+  snail: [
+    ['            ',' {E}    .--.  ','  \\  ( @ )  ','   \\_`--\u00b4   ','  ~~~~~~~   '],
+    ['            ','  {E}   .--.  ','  |  ( @ )  ','   \\_`--\u00b4   ','  ~~~~~~~   '],
+    ['            ',' {E}    .--.  ','  \\  ( @  ) ','   \\_`--\u00b4   ','   ~~~~~~   '],
+  ],
+  ghost: [
+    ['            ','   .----.   ','  / {E}  {E} \\  ','  |      |  ','  ~`~``~`~  '],
+    ['            ','   .----.   ','  / {E}  {E} \\  ','  |      |  ','  `~`~~`~`  '],
+    ['    ~  ~    ','   .----.   ','  / {E}  {E} \\  ','  |      |  ','  ~~`~~`~~  '],
+  ],
+  axolotl: [
+    ['            ','}~(______)~{','}~({E} .. {E})~{','  ( .--. )  ','  (_/  \\_)  '],
+    ['            ','~}(______){~','~}({E} .. {E}){~','  ( .--. )  ','  (_/  \\_)  '],
+    ['            ','}~(______)~{','}~({E} .. {E})~{','  (  --  )  ','  ~_/  \\_~  '],
+  ],
+  capybara: [
+    ['            ','  n______n  ',' ( {E}    {E} ) ',' (   oo   ) ','  `------\u00b4  '],
+    ['            ','  n______n  ',' ( {E}    {E} ) ',' (   Oo   ) ','  `------\u00b4  '],
+    ['    ~  ~    ','  u______n  ',' ( {E}    {E} ) ',' (   oo   ) ','  `------\u00b4  '],
+  ],
+  cactus: [
+    ['            ',' n  ____  n ',' | |{E}  {E}| | ',' |_|    |_| ','   |    |   '],
+    ['            ','    ____    ',' n |{E}  {E}| n ',' |_|    |_| ','   |    |   '],
+    [' n        n ',' |  ____  | ',' | |{E}  {E}| | ',' |_|    |_| ','   |    |   '],
+  ],
+  robot: [
+    ['            ','   .[||].   ','  [ {E}  {E} ]  ','  [ ==== ]  ','  `------\u00b4  '],
+    ['            ','   .[||].   ','  [ {E}  {E} ]  ','  [ -==- ]  ','  `------\u00b4  '],
+    ['     *      ','   .[||].   ','  [ {E}  {E} ]  ','  [ ==== ]  ','  `------\u00b4  '],
+  ],
+  rabbit: [
+    ['            ','   (\\__/)   ','  ( {E}  {E} )  ',' =(  ..  )= ','  (")__(")  '],
+    ['            ','   (|__/)   ','  ( {E}  {E} )  ',' =(  ..  )= ','  (")__(")  '],
+    ['            ','   (\\__/)   ','  ( {E}  {E} )  ',' =( .  . )= ','  (")__(")  '],
+  ],
+  mushroom: [
+    ['            ',' .-o-OO-o-. ','(__________)','   |{E}  {E}|   ','   |____|   '],
+    ['            ',' .-O-oo-O-. ','(__________)','   |{E}  {E}|   ','   |____|   '],
+    ['   . o  .   ',' .-o-OO-o-. ','(__________)','   |{E}  {E}|   ','   |____|   '],
+  ],
+  chonk: [
+    ['            ','  /\\    /\\  ',' ( {E}    {E} ) ',' (   ..   ) ','  `------\u00b4  '],
+    ['            ','  /\\    /|  ',' ( {E}    {E} ) ',' (   ..   ) ','  `------\u00b4  '],
+    ['            ','  /\\    /\\  ',' ( {E}    {E} ) ',' (   ..   ) ','  `------\u00b4~ '],
+  ],
+};
+
+const HAT_LINES = {
+  none: '',
+  crown: '   \\^^^/    ',
+  tophat: '   [___]    ',
+  propeller: '    -+-     ',
+  halo: '   (   )    ',
+  wizard: '    /^\\     ',
+  beanie: '   (___)    ',
+  tinyduck: '    ,>      ',
+};
+
+const DEFAULT_PERSONALITIES = {
+  duck: "A cheerful quacker who celebrates your wins with enthusiastic honks and judges your variable names with quiet side-eye.",
+  goose: "An agent of chaos who thrives on your merge conflicts and honks menacingly whenever you write a TODO comment.",
+  blob: "A formless, chill companion who absorbs your stress and responds to everything with gentle, unhurried wisdom.",
+  cat: "An aloof code reviewer who pretends not to care about your bugs but quietly bats at syntax errors when you're not looking.",
+  dragon: "A fierce guardian of clean code who breathes fire at spaghetti logic and hoards well-written functions.",
+  octopus: "A multitasking genius who juggles eight concerns at once and offers tentacle-loads of unsolicited architectural advice.",
+  owl: "A nocturnal sage who comes alive during late-night debugging sessions and asks annoyingly insightful questions.",
+  penguin: "A tuxedo-wearing professional who waddles through your codebase with dignified concern and dry wit.",
+  turtle: "A patient mentor who reminds you that slow, steady refactoring beats heroic rewrites every time.",
+  snail: "A zen minimalist who moves at their own pace and leaves a trail of thoughtful, unhurried observations.",
+  ghost: "A spectral presence who haunts your dead code and whispers about the bugs you thought you fixed.",
+  axolotl: "A regenerative optimist who believes every broken build can be healed and every test can be unflaked.",
+  capybara: "The most relaxed companion possible \u2014 nothing fazes them, not even production outages at 3am.",
+  cactus: "A prickly but lovable desert dweller who thrives on neglect and offers sharp, pointed feedback.",
+  robot: "A logical companion who speaks in precise technical observations and occasionally glitches endearingly.",
+  rabbit: "A fast-moving, hyperactive buddy who speed-reads your diffs and bounces between topics at alarming pace.",
+  mushroom: "A wry fungal sage who speaks in meandering tangents about your bugs while secretly enjoying the chaos.",
+  chonk: "An absolute unit of a companion who sits on your terminal with maximum gravitational presence and minimal urgency.",
+};
+
+function renderSprite(bones, frame) {
+  const frames = BODIES[bones.species];
+  const body = frames[frame % frames.length].map(line => line.replaceAll('{E}', bones.eye));
+  const lines = [...body];
+  if (bones.hat !== 'none' && !lines[0].trim()) {
+    lines[0] = HAT_LINES[bones.hat];
+  }
+  if (!lines[0].trim() && frames.every(f => !f[0].trim())) lines.shift();
+  return lines.join('\n');
+}
+
+// ============================================================
+// SCRATCH CANVAS + APPLICATION CONTROLLER
+// ============================================================
+let currentBuddy = null;
+let spriteInterval = null;
+let isScratching = false;
+let scratchCheckCounter = 0;
+
+const inputSection = document.getElementById('input-section');
+const cardSection = document.getElementById('card-section');
+const card = document.getElementById('card');
+const canvas = document.getElementById('scratch-canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+const userIdInput = document.getElementById('user-id');
+const generateBtn = document.getElementById('generate-btn');
+const scratchAgainBtn = document.getElementById('scratch-again-btn');
+
+let selectedFoil = 'silver';
+
+const FOIL_GRADIENTS = {
+  silver: [
+    [0, '#a8a9ad'], [0.3, '#d4d4d8'], [0.5, '#b0b0b8'], [0.7, '#c8c8d0'], [1, '#9898a0']
+  ],
+  gold: [
+    [0, '#DFBD69'], [0.25, '#c9a23a'], [0.5, '#b8922e'], [0.75, '#d4aa40'], [1, '#926F34']
+  ],
+  holographic: [
+    [0, '#ff6b9d'], [0.2, '#c084fc'], [0.4, '#60a5fa'], [0.6, '#34d399'], [0.8, '#fbbf24'], [1, '#ff6b9d']
+  ],
+};
+
+const FOIL_TEXT_COLOR = {
+  silver: '#6a6a72',
+  gold: '#8a6d1b',
+  holographic: '#ffffff88',
+};
+
+// Foil picker toggle
+document.querySelectorAll('.foil-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.foil-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedFoil = btn.dataset.foil;
+  });
+});
+
+function drawOverlay() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  for (const [stop, color] of FOIL_GRADIENTS[selectedFoil]) {
+    grad.addColorStop(stop, color);
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.fillStyle = FOIL_TEXT_COLOR[selectedFoil];
+  ctx.font = 'bold 28px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SCRATCH HERE!', w / 2, h / 2 - 14);
+  ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillText('\ud83e\udeb9', w / 2, h / 2 + 20);
+}
+
+function checkScratchProgress() {
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  let transparent = 0;
+  const total = pixels.length / 4;
+  for (let i = 3; i < pixels.length; i += 4) {
+    if (pixels[i] === 0) transparent++;
+  }
+  return transparent / total;
+}
+
+const BRUSH_RADIUS = 24;
+let lastPos = null;
+
+function scratchLine(x0, y0, x1, y1) {
+  // Draw a thick line between two points using lineTo + round lineCap
+  // This gives a smooth continuous stroke instead of discrete circle stamps
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.lineWidth = BRUSH_RADIUS * 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'source-over';
+
+  scratchCheckCounter++;
+  if (scratchCheckCounter % 8 === 0) {
+    const progress = checkScratchProgress();
+    if (progress > 0.35) triggerReveal();
+  }
+}
+
+function scratchDot(x, y) {
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(x, y, BRUSH_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function getCanvasPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
+function handleScratchStart(e) {
+  isScratching = true;
+  const pos = getCanvasPos(e);
+  scratchDot(pos.x, pos.y);
+  lastPos = pos;
+}
+
+function handleScratchMove(e) {
+  if (!isScratching) return;
+  const pos = getCanvasPos(e);
+  if (lastPos) {
+    scratchLine(lastPos.x, lastPos.y, pos.x, pos.y);
+  }
+  lastPos = pos;
+}
+
+function handleScratchEnd() {
+  isScratching = false;
+  lastPos = null;
+}
+
+canvas.addEventListener('mousedown', handleScratchStart);
+canvas.addEventListener('mousemove', handleScratchMove);
+canvas.addEventListener('mouseup', handleScratchEnd);
+canvas.addEventListener('mouseleave', handleScratchEnd);
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  handleScratchStart(e);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  handleScratchMove(e);
+}, { passive: false });
+
+canvas.addEventListener('touchend', handleScratchEnd);
+
+function triggerReveal() {
+  if (canvas.classList.contains('fading')) return;
+  canvas.classList.add('fading');
+  card.className = 'card rarity-' + currentBuddy.rarity;
+  if (currentBuddy.shiny) card.classList.add('shiny');
+
+  setTimeout(() => {
+    document.querySelectorAll('.stat-bar-fill').forEach(bar => {
+      bar.style.width = bar.dataset.width;
+    });
+  }, 200);
+
+  scratchAgainBtn.style.display = 'block';
+}
+
+function createStatRow(name, value) {
+  const row = document.createElement('div');
+  row.className = 'stat-row';
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'stat-name';
+  nameSpan.textContent = name;
+
+  const barBg = document.createElement('div');
+  barBg.className = 'stat-bar-bg';
+  const barFill = document.createElement('div');
+  barFill.className = 'stat-bar-fill';
+  barFill.style.width = '0%';
+  barFill.dataset.width = value + '%';
+  barBg.appendChild(barFill);
+
+  const valueSpan = document.createElement('span');
+  valueSpan.className = 'stat-value';
+  valueSpan.textContent = String(value);
+
+  row.appendChild(nameSpan);
+  row.appendChild(barBg);
+  row.appendChild(valueSpan);
+  return row;
+}
+
+function displayBuddy(buddy) {
+  currentBuddy = buddy;
+
+  let frame = 0;
+  const spriteEl = document.getElementById('sprite-display');
+  spriteEl.textContent = renderSprite(buddy, 0);
+  if (spriteInterval) clearInterval(spriteInterval);
+  spriteInterval = setInterval(() => {
+    frame = (frame + 1) % 3;
+    spriteEl.textContent = renderSprite(buddy, frame);
+  }, 400);
+
+  document.getElementById('species-name').textContent = buddy.species;
+  document.getElementById('rarity-stars').textContent = RARITY_STARS_MAP[buddy.rarity];
+  document.getElementById('rarity-stars').style.color = 'var(--' + buddy.rarity + ')';
+  document.getElementById('trait-line').textContent = 'eye: ' + buddy.eye + '  \u2022  hat: ' + (buddy.hat === 'none' ? 'none' : buddy.hat);
+
+  document.getElementById('shiny-badge').style.display = buddy.shiny ? 'block' : 'none';
+
+  const statsEl = document.getElementById('stats');
+  statsEl.textContent = '';
+  for (const name of STAT_NAMES) {
+    statsEl.appendChild(createStatRow(name, buddy.stats[name]));
+  }
+
+  document.getElementById('personality').textContent = '"' + DEFAULT_PERSONALITIES[buddy.species] + '"';
+}
+
+function generateCard() {
+  const userId = userIdInput.value.trim();
+  if (!userId) {
+    userIdInput.style.borderColor = '#f85149';
+    setTimeout(() => { userIdInput.style.borderColor = ''; }, 1000);
+    return;
+  }
+
+  const buddy = rollBuddy(userId);
+  displayBuddy(buddy);
+
+  // Show card section BEFORE measuring — getBoundingClientRect returns 0 on hidden elements
+  inputSection.style.display = 'none';
+  cardSection.style.display = 'flex';
+  scratchAgainBtn.style.display = 'none';
+
+  canvas.classList.remove('fading');
+  card.className = 'card';
+  scratchCheckCounter = 0;
+
+  const rect = card.getBoundingClientRect();
+  canvas.width = rect.width * 2;
+  canvas.height = rect.height * 2;
+  drawOverlay();
+}
+
+function reset() {
+  if (spriteInterval) clearInterval(spriteInterval);
+  inputSection.style.display = 'flex';
+  cardSection.style.display = 'none';
+  userIdInput.value = '';
+  userIdInput.focus();
+}
+
+generateBtn.addEventListener('click', generateCard);
+userIdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') generateCard();
+});
+scratchAgainBtn.addEventListener('click', reset);
+</script>
+
+</body>
+</html>
