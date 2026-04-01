@@ -393,7 +393,7 @@ h1 {
     </div>
     <div class="share-buttons" id="share-buttons" style="display:none">
       <a class="share-btn download" id="download-video-btn" download="my-claude-buddy.webm">Download Video</a>
-      <a class="share-btn twitter" id="tweet-btn" target="_blank" rel="noopener">Share on X with #ClaudeBuddy</a>
+      <button class="share-btn twitter" id="share-x-btn">Share on X with #ClaudeBuddy</button>
     </div>
   </div>
 </div>
@@ -972,10 +972,11 @@ const shareSection = document.getElementById('share-section');
 const recIndicator = document.getElementById('rec-indicator');
 const shareButtons = document.getElementById('share-buttons');
 const downloadVideoBtn = document.getElementById('download-video-btn');
-const tweetBtn = document.getElementById('tweet-btn');
+const shareXBtn = document.getElementById('share-x-btn');
 
 let mediaRecorder = null;
 let recordedChunks = [];
+let lastRecordedBlob = null;
 let recordingCanvas = null;
 let recordingCtx = null;
 let captureInterval = null;
@@ -1005,16 +1006,11 @@ function startRecording() {
   };
 
   mediaRecorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
-    const url = URL.createObjectURL(blob);
+    lastRecordedBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+    const url = URL.createObjectURL(lastRecordedBlob);
     downloadVideoBtn.href = url;
     recIndicator.style.display = 'none';
     shareButtons.style.display = 'flex';
-
-    const tweetText = encodeURIComponent(
-      'Just scratched my Claude Code buddy card! 🎉 #ClaudeBuddy\nhttps://matrixy.github.io/whats-my-buddy/'
-    );
-    tweetBtn.href = 'https://twitter.com/intent/tweet?text=' + tweetText;
   };
 
   mediaRecorder.start(100);
@@ -1093,6 +1089,21 @@ userIdInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') generateCard();
 });
 scratchAgainBtn.addEventListener('click', reset);
+
+shareXBtn.addEventListener('click', async () => {
+  const shareText = 'Just scratched my Claude Code buddy card! \ud83c\udf89 #ClaudeBuddy\nhttps://matrixy.github.io/whats-my-buddy/';
+
+  if (lastRecordedBlob && navigator.canShare) {
+    const file = new File([lastRecordedBlob], 'my-claude-buddy.webm', { type: lastRecordedBlob.type });
+    const shareData = { text: shareText, files: [file] };
+    if (navigator.canShare(shareData)) {
+      try { await navigator.share(shareData); return; } catch (e) { /* user cancelled or failed */ }
+    }
+  }
+  // Fallback: open tweet intent (text only, user attaches video manually)
+  const tweetUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText);
+  window.open(tweetUrl, '_blank');
+});
 </script>
 
 </body>
