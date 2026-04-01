@@ -799,11 +799,78 @@ function getCanvasPos(e) {
   };
 }
 
+// ── Scratch Audio (Web Audio API) ────────────────────
+let audioCtx = null;
+let scratchNoiseNode = null;
+let scratchGain = null;
+let scratchFilter = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Create a buffer of brown noise (sounds like scratching/sandpaper)
+  const bufferSize = audioCtx.sampleRate * 2;
+  const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  let lastOut = 0;
+  for (let i = 0; i < bufferSize; i++) {
+    const white = Math.random() * 2 - 1;
+    data[i] = (lastOut + 0.02 * white) / 1.02;
+    lastOut = data[i];
+    data[i] *= 3.5; // boost
+  }
+
+  scratchNoiseNode = audioCtx.createBufferSource();
+  scratchNoiseNode.buffer = noiseBuffer;
+  scratchNoiseNode.loop = true;
+
+  // Bandpass filter to make it sound like cardstock scratching
+  scratchFilter = audioCtx.createBiquadFilter();
+  scratchFilter.type = 'bandpass';
+  scratchFilter.frequency.value = 1800;
+  scratchFilter.Q.value = 0.8;
+
+  // Gain node starts silent
+  scratchGain = audioCtx.createGain();
+  scratchGain.gain.value = 0;
+
+  scratchNoiseNode.connect(scratchFilter);
+  scratchFilter.connect(scratchGain);
+  scratchGain.connect(audioCtx.destination);
+  scratchNoiseNode.start();
+}
+
+function startScratchSound() {
+  if (!audioCtx) initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  scratchGain.gain.cancelScheduledValues(audioCtx.currentTime);
+  scratchGain.gain.setTargetAtTime(0.6, audioCtx.currentTime, 0.05);
+}
+
+function stopScratchSound() {
+  if (!scratchGain) return;
+  scratchGain.gain.cancelScheduledValues(audioCtx.currentTime);
+  scratchGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08);
+}
+
+let lastMoveTime = 0;
+function adjustScratchPitch(e) {
+  if (!scratchFilter) return;
+  const now = performance.now();
+  const dt = now - lastMoveTime;
+  lastMoveTime = now;
+  // Faster movement = higher pitch
+  const speed = Math.min(1, 50 / Math.max(dt, 1));
+  scratchFilter.frequency.setTargetAtTime(1200 + speed * 2400, audioCtx.currentTime, 0.05);
+}
+
 function handleScratchStart(e) {
   isScratching = true;
   const pos = getCanvasPos(e);
   scratchDot(pos.x, pos.y);
   lastPos = pos;
+  startScratchSound();
 }
 
 function handleScratchMove(e) {
@@ -813,11 +880,13 @@ function handleScratchMove(e) {
     scratchLine(lastPos.x, lastPos.y, pos.x, pos.y);
   }
   lastPos = pos;
+  adjustScratchPitch(e);
 }
 
 function handleScratchEnd() {
   isScratching = false;
   lastPos = null;
+  stopScratchSound();
 }
 
 canvas.addEventListener('mousedown', handleScratchStart);
