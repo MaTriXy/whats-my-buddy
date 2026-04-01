@@ -799,70 +799,61 @@ function getCanvasPos(e) {
   };
 }
 
-// ── Scratch Audio (Web Audio API) ────────────────────
+// ── Scratch Audio (Web Audio API) — sparkle/shimmer ──
 let audioCtx = null;
-let scratchNoiseNode = null;
 let scratchGain = null;
-let scratchFilter = null;
+let sparkleInterval = null;
 
 function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-  // Create a buffer of brown noise (sounds like scratching/sandpaper)
-  const bufferSize = audioCtx.sampleRate * 2;
-  const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-  const data = noiseBuffer.getChannelData(0);
-  let lastOut = 0;
-  for (let i = 0; i < bufferSize; i++) {
-    const white = Math.random() * 2 - 1;
-    data[i] = (lastOut + 0.02 * white) / 1.02;
-    lastOut = data[i];
-    data[i] *= 3.5; // boost
-  }
-
-  scratchNoiseNode = audioCtx.createBufferSource();
-  scratchNoiseNode.buffer = noiseBuffer;
-  scratchNoiseNode.loop = true;
-
-  // Bandpass filter to make it sound like cardstock scratching
-  scratchFilter = audioCtx.createBiquadFilter();
-  scratchFilter.type = 'bandpass';
-  scratchFilter.frequency.value = 1800;
-  scratchFilter.Q.value = 0.8;
-
-  // Gain node starts silent
   scratchGain = audioCtx.createGain();
   scratchGain.gain.value = 0;
-
-  scratchNoiseNode.connect(scratchFilter);
-  scratchFilter.connect(scratchGain);
   scratchGain.connect(audioCtx.destination);
-  scratchNoiseNode.start();
+}
+
+// Play a short sparkle tone — random note from a pentatonic scale
+function playSparkle() {
+  if (!audioCtx || !scratchGain) return;
+  const notes = [523, 587, 659, 784, 880, 1047, 1175, 1319]; // C5-E6 pentatonic-ish
+  const freq = notes[Math.floor(Math.random() * notes.length)];
+
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+
+  const env = audioCtx.createGain();
+  const t = audioCtx.currentTime;
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.12, t + 0.01);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+
+  osc.connect(env);
+  env.connect(scratchGain);
+  osc.start(t);
+  osc.stop(t + 0.15);
 }
 
 function startScratchSound() {
   if (!audioCtx) initAudio();
   if (audioCtx.state === 'suspended') audioCtx.resume();
   scratchGain.gain.cancelScheduledValues(audioCtx.currentTime);
-  scratchGain.gain.setTargetAtTime(0.6, audioCtx.currentTime, 0.05);
+  scratchGain.gain.setTargetAtTime(1, audioCtx.currentTime, 0.03);
+  // Emit sparkles while scratching
+  if (!sparkleInterval) {
+    sparkleInterval = setInterval(playSparkle, 60);
+  }
 }
 
 function stopScratchSound() {
+  if (sparkleInterval) { clearInterval(sparkleInterval); sparkleInterval = null; }
   if (!scratchGain) return;
   scratchGain.gain.cancelScheduledValues(audioCtx.currentTime);
-  scratchGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08);
+  scratchGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
 }
 
-let lastMoveTime = 0;
-function adjustScratchPitch(e) {
-  if (!scratchFilter) return;
-  const now = performance.now();
-  const dt = now - lastMoveTime;
-  lastMoveTime = now;
-  // Faster movement = higher pitch
-  const speed = Math.min(1, 50 / Math.max(dt, 1));
-  scratchFilter.frequency.setTargetAtTime(1200 + speed * 2400, audioCtx.currentTime, 0.05);
+function adjustScratchPitch() {
+  // no-op, kept for compatibility with handleScratchMove
 }
 
 function handleScratchStart(e) {
