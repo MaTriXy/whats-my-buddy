@@ -838,8 +838,10 @@ canvas.addEventListener('touchmove', (e) => {
 canvas.addEventListener('touchend', handleScratchEnd);
 
 // ── Confetti ──────────────────────────────────────────
+let activeConfettiCanvas = null;
 function launchConfetti() {
   const confettiCanvas = document.createElement('canvas');
+  activeConfettiCanvas = confettiCanvas;
   confettiCanvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999';
   document.body.appendChild(confettiCanvas);
   const cCtx = confettiCanvas.getContext('2d');
@@ -887,7 +889,7 @@ function launchConfetti() {
     }
     frame++;
     if (alive) requestAnimationFrame(animate);
-    else confettiCanvas.remove();
+    else { confettiCanvas.remove(); activeConfettiCanvas = null; }
   }
   requestAnimationFrame(animate);
 }
@@ -1124,16 +1126,21 @@ function captureFrame() {
     recordingCtx.restore();
   }
 
-  // 3. Draw the scratch canvas overlay on top
-  recordingCtx.drawImage(canvas, 0, 0, rw, rh);
+  // 3. Draw the scratch canvas overlay, respecting CSS opacity (fade on reveal)
+  const canvasOpacity = parseFloat(getComputedStyle(canvas).opacity);
+  if (canvasOpacity > 0.01) {
+    recordingCtx.save();
+    recordingCtx.globalAlpha = canvasOpacity;
+    recordingCtx.drawImage(canvas, 0, 0, rw, rh);
+    recordingCtx.restore();
+  }
 
-  // 4. Draw confetti canvas if it exists
-  const confettiCanvas = document.querySelector('canvas[style*="position:fixed"]');
-  if (confettiCanvas) {
+  // 4. Draw confetti if active
+  if (activeConfettiCanvas) {
     const cardRect = card.getBoundingClientRect();
     recordingCtx.drawImage(
-      confettiCanvas,
-      cardRect.left * 2, cardRect.top * 2, rw, rh,
+      activeConfettiCanvas,
+      Math.round(cardRect.left * 2), Math.round(cardRect.top * 2), rw, rh,
       0, 0, rw, rh
     );
   }
@@ -1142,7 +1149,7 @@ function captureFrame() {
 function stopRecording() {
   if (captureInterval) { cancelAnimationFrame(captureInterval); captureInterval = null; }
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    // Keep capturing for 2.5s more to get the full confetti + reveal
+    // Keep capturing for 4s to get the full reveal fade, confetti, and stat bars
     const extendCapture = () => {
       captureFrame();
       captureInterval = requestAnimationFrame(extendCapture);
@@ -1152,7 +1159,7 @@ function stopRecording() {
       cancelAnimationFrame(captureInterval);
       captureInterval = null;
       mediaRecorder.stop();
-    }, 2500);
+    }, 4000);
   }
 }
 
