@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Discover Your Claude Code Buddy</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -255,6 +256,60 @@ h1 {
   margin-top: 1rem;
 }
 
+/* --- Recording & Share --- */
+#share-section {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #f85149;
+  font-weight: 600;
+}
+
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f85149;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.share-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.share-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  text-decoration: none;
+  color: #fff;
+}
+
+.share-btn:hover { opacity: 0.85; }
+.share-btn.download { background: #238636; }
+.share-btn.twitter { background: #1d9bf0; }
+
 /* --- Rarity glow --- */
 .card.rarity-common { border-color: var(--common); }
 .card.rarity-uncommon { border-color: var(--uncommon); box-shadow: 0 0 20px rgba(63,185,80,0.2); }
@@ -332,6 +387,15 @@ h1 {
     <canvas id="scratch-canvas"></canvas>
   </div>
   <button id="scratch-again-btn">Scratch Again</button>
+  <div id="share-section">
+    <div class="recording-indicator" id="rec-indicator">
+      <span class="recording-dot"></span> Recording your reveal...
+    </div>
+    <div class="share-buttons" id="share-buttons" style="display:none">
+      <a class="share-btn download" id="download-video-btn" download="my-claude-buddy.webm">Download Video</a>
+      <a class="share-btn twitter" id="tweet-btn" target="_blank" rel="noopener">Share on X with #ClaudeBuddy</a>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -844,6 +908,9 @@ function triggerReveal() {
   }, 200);
 
   scratchAgainBtn.style.display = 'block';
+
+  // Stop recording after confetti settles
+  stopRecording();
 }
 
 function createStatRow(name, value) {
@@ -900,6 +967,87 @@ function displayBuddy(buddy) {
   document.getElementById('personality').textContent = '"' + DEFAULT_PERSONALITIES[buddy.species] + '"';
 }
 
+// ── Video Recording ──────────────────────────────────
+const shareSection = document.getElementById('share-section');
+const recIndicator = document.getElementById('rec-indicator');
+const shareButtons = document.getElementById('share-buttons');
+const downloadVideoBtn = document.getElementById('download-video-btn');
+const tweetBtn = document.getElementById('tweet-btn');
+
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingCanvas = null;
+let recordingCtx = null;
+let captureInterval = null;
+
+function startRecording() {
+  recordedChunks = [];
+  shareSection.style.display = 'flex';
+  recIndicator.style.display = 'flex';
+  shareButtons.style.display = 'none';
+
+  // Create an offscreen canvas to composite the card
+  recordingCanvas = document.createElement('canvas');
+  recordingCanvas.width = 760;
+  recordingCanvas.height = 1040;
+  recordingCtx = recordingCanvas.getContext('2d');
+
+  const stream = recordingCanvas.captureStream(30);
+  mediaRecorder = new MediaRecorder(stream, {
+    mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : 'video/webm',
+    videoBitsPerSecond: 2500000,
+  });
+
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+    const url = URL.createObjectURL(blob);
+    downloadVideoBtn.href = url;
+    recIndicator.style.display = 'none';
+    shareButtons.style.display = 'flex';
+
+    const tweetText = encodeURIComponent(
+      'Just scratched my Claude Code buddy card! 🎉 #ClaudeBuddy\nhttps://matrixy.github.io/whats-my-buddy/'
+    );
+    tweetBtn.href = 'https://twitter.com/intent/tweet?text=' + tweetText;
+  };
+
+  mediaRecorder.start(100);
+
+  // Capture frames by rendering the card element to the recording canvas
+  captureFrame();
+  captureInterval = setInterval(captureFrame, 1000 / 30);
+}
+
+function captureFrame() {
+  if (!recordingCtx) return;
+  html2canvas(card, {
+    backgroundColor: '#161b22',
+    scale: 2,
+    logging: false,
+    useCORS: true,
+  }).then(snapshot => {
+    recordingCtx.clearRect(0, 0, recordingCanvas.width, recordingCanvas.height);
+    recordingCtx.drawImage(snapshot, 0, 0, recordingCanvas.width, recordingCanvas.height);
+  }).catch(() => {});
+}
+
+function stopRecording() {
+  clearInterval(captureInterval);
+  captureInterval = null;
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    // Capture a few more frames for the confetti, then stop
+    setTimeout(() => {
+      mediaRecorder.stop();
+    }, 2000);
+  }
+}
+
 function generateCard() {
   const userId = userIdInput.value.trim();
   if (!userId) {
@@ -924,10 +1072,16 @@ function generateCard() {
   canvas.width = rect.width * 2;
   canvas.height = rect.height * 2;
   drawOverlay();
+
+  // Start recording the scratch experience
+  startRecording();
 }
 
 function reset() {
   if (spriteInterval) clearInterval(spriteInterval);
+  if (captureInterval) { clearInterval(captureInterval); captureInterval = null; }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  shareSection.style.display = 'none';
   inputSection.style.display = 'flex';
   cardSection.style.display = 'none';
   userIdInput.value = '';
